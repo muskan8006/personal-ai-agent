@@ -6,3 +6,15 @@ __pycache__/
 logs/*
 *.db
 *.sqlite
+# Python test and tooling cache
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local workspace data
+workspace/
+.app/
+
+# Temporary backup files
+*.backup
+*_before_checkpoint.py
