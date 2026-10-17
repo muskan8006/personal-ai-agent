@@ -2,8 +2,6 @@ from datetime import datetime
 from pathlib import Path
 import hashlib
 import json
-
-
 class AuditLogger:
     def __init__(self):
         self.log_directory = Path("logs")
@@ -103,7 +101,7 @@ class AuditLogger:
         risk: str,
         result: str,
     ) -> None:
-        # Refuse to append when an existing audit trail is invalid.
+        # Verify the existing audit trail before appending.
         if self.log_file.exists() and self.log_file.stat().st_size > 0:
             if not self.verify_integrity():
                 raise RuntimeError(
@@ -141,18 +139,30 @@ class AuditLogger:
             encoding="utf-8",
         )
 
-        # Intentionally do not rewrite the checkpoint automatically.
-        # Checkpoint advancement needs a separately verified,
-        # explicit policy to avoid silently accepting tampering.
+        # Advance the checkpoint after a successful append.
+        with self.log_file.open(
+            "r",
+            encoding="utf-8",
+        ) as file:
+            entry_count = sum(1 for _ in file)
+
+        self._write_checkpoint(
+            entry_count=entry_count,
+            last_hash=current_hash,
+        )
 
     def verify_integrity(self) -> bool:
         if not self.log_file.exists():
             print("TAMPERED | No security log found")
             return False
 
-        lines = self.log_file.read_text(
-            encoding="utf-8"
-        ).splitlines()
+        try:
+            lines = self.log_file.read_text(
+                encoding="utf-8"
+            ).splitlines()
+        except OSError:
+            print("TAMPERED | Cannot read security log")
+            return False
 
         if not lines:
             print("TAMPERED | Audit log is empty")
@@ -183,7 +193,11 @@ class AuditLogger:
 
             previous_hash = stored_hash
 
-        current_hash = self._get_previous_hash()
+        try:
+            current_hash = self._get_previous_hash()
+        except OSError:
+            print("TAMPERED | Cannot read hash state")
+            return False
 
         if current_hash != previous_hash:
             print("TAMPERED | Hash state mismatch")
