@@ -149,3 +149,67 @@ def test_deleted_middle_audit_entry_fails_integrity_check(tmp_path):
     )
 
     assert logger.verify_integrity() is False
+
+def test_repeated_logging_updates_checkpoint_automatically(tmp_path):
+    logger = make_test_logger(tmp_path)
+
+    logger.log(
+        action="create file",
+        role="owner",
+        risk="low",
+        result="executed",
+    )
+    logger.log(
+        action="read file",
+        role="owner",
+        risk="low",
+        result="executed",
+    )
+
+    lines = logger.log_file.read_text(
+        encoding="utf-8"
+    ).splitlines()
+
+    checkpoint = json.loads(
+        logger.checkpoint_file.read_text(
+            encoding="utf-8"
+        )
+    )
+
+    assert len(lines) == 2
+    assert checkpoint["entry_count"] == 2
+    assert checkpoint["last_hash"] == lines[-1].rsplit(
+        " | HASH=", 1
+    )[1]
+    assert logger.verify_integrity() is True
+
+def test_missing_checkpoint_fails_integrity_check(tmp_path):
+    logger = make_test_logger(tmp_path)
+
+    logger.log(
+        action="create file",
+        role="owner",
+        risk="low",
+        result="executed",
+    )
+
+    logger.checkpoint_file.unlink()
+
+    assert logger.verify_integrity() is False
+
+def test_invalid_checkpoint_fails_integrity_check(tmp_path):
+    logger = make_test_logger(tmp_path)
+
+    logger.log(
+        action="create file",
+        role="owner",
+        risk="low",
+        result="executed",
+    )
+
+    logger.checkpoint_file.write_text(
+        '{"version": 99, "entry_count": 1, "last_hash": "invalid"}',
+        encoding="utf-8",
+    )
+
+    assert logger.verify_integrity() is False
